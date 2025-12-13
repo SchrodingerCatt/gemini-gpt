@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ერთიანი LLM Gateway (Gemini & GPT RAG)</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 800px;
+        }
+        h1 {
+            color: #4a90e2;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        .model-select {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            gap: 15px;
+        }
+        .model-button {
+            padding: 10px 20px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            background-color: #f9f9f9;
+        }
+        .model-button.active {
+            border-color: #4a90e2;
+            background-color: #4a90e2;
+            color: #fff;
+        }
+        .model-button:hover:not(.active) {
+            background-color: #e0e0e0;
+        }
+        textarea {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+            box-sizing: border-box;
+            min-height: 100px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #5cb85c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #4cae4c;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        /* 💥💥 შესწორებული სტილები Word Wrap-ისთვის 💥💥 */
+        .response-container {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            min-height: 150px;
+            border: 1px solid #dee2e6;
+        }
+        
+        #response-output { /* სტილი <pre> თეგისთვის */
+            white-space: pre-wrap; /* ახალი ხაზების შენარჩუნება */
+            word-wrap: break-word; /* გრძელი სიტყვების გადატანა */
+            word-break: break-word; /* მკაცრი გადატანა კონტეინერში */
+            margin: 0;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #333;
+        }
+        /* 💥💥 შესწორებული სტილები დასრულდა 💥💥 */
+
+        .response-header {
+            font-weight: bold;
+            color: #4a90e2;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 5px;
+        }
+        .status-message {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #6c757d;
+            text-align: center;
+        }
+        .status-message.error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗣️ Gemini & GPT RAG Gateway</h1>
+        
+        <div class="model-select">
+            <div id="gemini-btn" class="model-button active" data-model="gemini">
+                💎 Gemini Flash
+            </div>
+            <div id="gpt-btn" class="model-button" data-model="gpt">
+                🤖 GPT-4o Mini
+            </div>
+        </div>
+
+        <textarea id="prompt-input" placeholder="შეიყვანეთ თქვენი შეკითხვა Steam-ის დოკუმენტებზე..." required></textarea>
+        
+        <button id="submit-btn" onclick="processQuery()">პასუხის მიღება</button>
+
+        <div class="status-message" id="status-message">აირჩიეთ მოდელი და შეიყვანეთ შეკითხვა.</div>
+
+        <div class="response-container">
+            <div class="response-header">პასუხი (<span id="active-model-display">Gemini</span>):</div>
+            <pre id="response-output">პასუხი გამოჩნდება აქ...</pre>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://localhost:8090/process_query";
+        const DEFAULT_MODEL = 'gemini';
+        let activeModel = DEFAULT_MODEL;
+
+        const input = document.getElementById('prompt-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const responseOutput = document.getElementById('response-output');
+        const statusMessage = document.getElementById('status-message');
+        const activeModelDisplay = document.getElementById('active-model-display');
+        const geminiBtn = document.getElementById('gemini-btn');
+        const gptBtn = document.getElementById('gpt-btn');
+
+        // --- მოდელის არჩევის ლოგიკა ---
+        function selectModel(model) {
+            activeModel = model;
+            activeModelDisplay.textContent = model === 'gemini' ? 'Gemini' : 'GPT';
+            geminiBtn.classList.remove('active');
+            gptBtn.classList.remove('active');
+            
+            if (model === 'gemini') {
+                geminiBtn.classList.add('active');
+            } else {
+                gptBtn.classList.add('active');
+            }
+        }
+
+        geminiBtn.addEventListener('click', () => selectModel('gemini'));
+        gptBtn.addEventListener('click', () => selectModel('gpt'));
+        
+        // --- API-სთან დაკავშირების ლოგიკა ---
+        async function processQuery() {
+            const prompt = input.value.trim();
+            if (!prompt) {
+                alert("გთხოვთ, შეიყვანოთ შეკითხვა.");
+                return;
+            }
+
+            // UI-ის განახლება
+            submitBtn.disabled = true;
+            submitBtn.textContent = `პასუხის მიღება... (${activeModel.toUpperCase()})`;
+            responseOutput.textContent = 'მიმდინარეობს დამუშავება...';
+            statusMessage.textContent = 'მოთხოვნა იგზავნება API-ზე.';
+            statusMessage.classList.remove('error');
+
+            const requestBody = {
+                prompt: prompt,
+                user_id: "web_user_" + Date.now(), // უნიკალური ID ტესტისთვის
+                model_choice: activeModel
+            };
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    responseOutput.textContent = data.ai_response;
+                    
+                    const ragStatus = data.result_data.is_rag_active ? '✅ RAG აქტიურია' : '❌ RAG არააქტიურია';
+                    statusMessage.textContent = `${ragStatus} | მოდელი: ${data.result_data.used_model}`;
+
+                } else {
+                    responseOutput.textContent = `API შეცდომა: ${data.ai_response || 'პასუხი ვერ მიიღეს.'}`;
+                    statusMessage.textContent = `❌ შეცდომა: ${data.ai_response || 'პასუხი ვერ მიიღეს.'}`;
+                    statusMessage.classList.add('error');
+                }
+
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                responseOutput.textContent = "კავშირის შეცდომა. შეამოწმეთ, მუშაობს თუ არა ბექენდი (Python main.py).";
+                statusMessage.textContent = "❌ კავშირის შეცდომა. შეამოწმეთ 8090 პორტი.";
+                statusMessage.classList.add('error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'პასუხის მიღება';
+            }
+        }
+    </script>
+</body>
+</html>
