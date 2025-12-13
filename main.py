@@ -29,10 +29,10 @@ except ImportError:
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
 
-# 💥 დიაგნოსტიკური ლოგირება 💥
+# 💥💥 დიაგნოსტიკური ლოგირება - ეს ხაზები გამოგვიგზავნეთ! 💥💥
 print(f"DEBUG: GEMINI_API_KEY სტატუსი: {'✅ აქტიურია' if GEMINI_API_KEY else '❌ ვერ მოიძებნა'}")
 print(f"DEBUG: OPENAI_API_KEY სტატუსი: {'✅ აქტიურია' if OPENAI_API_KEY else '❌ ვერ მოიძებნა'}")
-# 💥 დიაგნოსტიკური ლოგირება დასრულდა 💥
+# 💥💥 დიაგნოსტიკური ლოგირება დასრულდა 💥💥
 
 # --- მოდელების და RAG-ის პარამეტრები ---
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
@@ -76,17 +76,14 @@ async def startup_event():
     global global_rag_retriever_gemini
     global global_rag_retriever_gpt
     
-    # 💥💥 კოდის ლოგიკის შეცვლა 💥💥
-    # RAG ინიციალიზაციის ლოგიკა ახლა მხოლოდ იმაზეა დამოკიდებული,
-    # აქვს თუ არა გლობალურ ცვლადებს მნიშვნელობა.
-    
     if not RAG_TOOLS_AVAILABLE:
         print("RAG ინიციალიზაცია გამოტოვებულია.")
         return
         
     # 2. 🤖 GPT RAG ინიციალიზაცია 
     if OPENAI_API_KEY:
-        # არ გვჭირდება os.environ-ში ხელახლა ჩაწერა
+        # Langchain ავტომატურად გამოიყენებს os.environ-ს თუ დაყენებულია, 
+        # მაგრამ რადგან ჩვენი გლობალური ცვლადი OPENAI_API_KEY აქტიურია, ვაგრძელებთ.
         if os.path.exists(CHROMA_PATH_GPT):
             try:
                 embeddings_gpt = OpenAIEmbeddings(model="text-embedding-3-small")
@@ -111,7 +108,6 @@ async def startup_event():
             print(f"✅ Gemini RAG Retriever წარმატებით დაყენდა GPT-ის ბაზაზე: {CHROMA_PATH_GPT}")
         elif os.path.exists(CHROMA_PATH_GPT): 
             try:
-                # ვიმეორებთ ჩატვირთვას, თუ GPT-ის ინიციალიზაცია ვერ მოხერხდა
                 embeddings_gpt = OpenAIEmbeddings(model="text-embedding-3-small") 
                 vector_store = Chroma(
                     persist_directory=CHROMA_PATH_GPT, 
@@ -163,7 +159,7 @@ class ChatbotResponse(BaseModel):
 def generate_gemini_content(prompt: str) -> str:
     if not GEMINI_API_KEY:
         return "ERROR: Gemini API გასაღები ვერ მოიძებნა."
-    # ... (დანარჩენი ლოგიკა უცვლელია) ...
+    
     rag_context = ""
     is_rag_active = global_rag_retriever_gemini is not None
     
@@ -235,7 +231,7 @@ def generate_gemini_content(prompt: str) -> str:
             
     return "ERROR: პასუხი ვერ იქნა გენერირებული."
 
-# --- 2. GPT API-ს გამოძახება (შეცდომის დამუშავებით) ---
+# --- 2. GPT API-ს გამოძახება (განახლებულია შეცდომის დამუშავებით) ---
 def generate_gpt_content(prompt: str) -> str:
     if not OPENAI_API_KEY:
         return "ERROR: GPT API გასაღები ვერ მოიძებნა."
@@ -360,5 +356,4 @@ async def process_query(
     )
 
 if __name__ == "__main__":
-    # ეს ბლოკი იგნორირებულია uvicorn main:app-ის გამოყენებისას
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8090)))
