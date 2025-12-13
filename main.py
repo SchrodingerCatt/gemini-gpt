@@ -25,9 +25,14 @@ except ImportError:
     print("❌ RAG ბიბლიოთეკები ვერ ჩაიტვირთრა. RAG არააქტიურია.")
     
 # --- კონფიგურაცია: გასაღებების მოტანა გარემოს ცვლადებიდან ---
-# ვეყრდნობით მხოლოდ Render-ის გარემოს ცვლადებს
+# ამ ცვლადებს ვკითხულობთ მხოლოდ ერთხელ, გაშვების დასაწყისში
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
+
+# 💥 დიაგნოსტიკური ლოგირება 💥
+print(f"DEBUG: GEMINI_API_KEY სტატუსი: {'✅ აქტიურია' if GEMINI_API_KEY else '❌ ვერ მოიძებნა'}")
+print(f"DEBUG: OPENAI_API_KEY სტატუსი: {'✅ აქტიურია' if OPENAI_API_KEY else '❌ ვერ მოიძებნა'}")
+# 💥 დიაგნოსტიკური ლოგირება დასრულდა 💥
 
 # --- მოდელების და RAG-ის პარამეტრები ---
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
@@ -43,7 +48,7 @@ CHROMA_PATH_GPT = "chroma_db_gpt"
 global_rag_retriever_gemini: Optional[Chroma.as_retriever] = None
 global_rag_retriever_gpt: Optional[Chroma.as_retriever] = None 
 
-# --- ფუნქცია პერსონის PDF-დან ჩასატვირთად ---
+# --- ფუნქცია პერსონის PDF-დან ჩასატვირთად (უცვლელი) ---
 def load_persona_from_pdf(file_path: str) -> str:
     """კითხულობს მთელ ტექსტს PDF ფაილიდან pypdf-ის გამოყენებით."""
     DEFAULT_PERSONA = "თქვენ ხართ სასარგებლო ასისტენტი, რომელიც პასუხობს ქართულ ენაზე."
@@ -71,13 +76,17 @@ async def startup_event():
     global global_rag_retriever_gemini
     global global_rag_retriever_gpt
     
+    # 💥💥 კოდის ლოგიკის შეცვლა 💥💥
+    # RAG ინიციალიზაციის ლოგიკა ახლა მხოლოდ იმაზეა დამოკიდებული,
+    # აქვს თუ არა გლობალურ ცვლადებს მნიშვნელობა.
+    
     if not RAG_TOOLS_AVAILABLE:
         print("RAG ინიციალიზაცია გამოტოვებულია.")
         return
         
     # 2. 🤖 GPT RAG ინიციალიზაცია 
     if OPENAI_API_KEY:
-        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+        # არ გვჭირდება os.environ-ში ხელახლა ჩაწერა
         if os.path.exists(CHROMA_PATH_GPT):
             try:
                 embeddings_gpt = OpenAIEmbeddings(model="text-embedding-3-small")
@@ -90,7 +99,7 @@ async def startup_event():
             except Exception as e:
                 print(f"❌ ERROR: GPT ChromaDB-ის ჩატვირთვა ვერ მოხერხდა: {e}.")
         else:
-            print(f"⚠️ WARNING: ვექტორული ბაზა {CHROMA_PATH_GPT} ვერ მოიძებნა. GPT RAG არააქტიურია. გაუშვით ingest_gpt.py")
+            print(f"⚠️ WARNING: ვექტორული ბაზა {CHROMA_PATH_GPT} ვერ მოიძებნა. GPT RAG არააქტიურია.")
     else:
         print("❌ ERROR: OpenAI API გასაღები ვერ მოიძებნა (Startup).")
 
@@ -102,6 +111,7 @@ async def startup_event():
             print(f"✅ Gemini RAG Retriever წარმატებით დაყენდა GPT-ის ბაზაზე: {CHROMA_PATH_GPT}")
         elif os.path.exists(CHROMA_PATH_GPT): 
             try:
+                # ვიმეორებთ ჩატვირთვას, თუ GPT-ის ინიციალიზაცია ვერ მოხერხდა
                 embeddings_gpt = OpenAIEmbeddings(model="text-embedding-3-small") 
                 vector_store = Chroma(
                     persist_directory=CHROMA_PATH_GPT, 
@@ -117,7 +127,7 @@ async def startup_event():
         print("❌ ERROR: Gemini ან OpenAI API გასაღები ვერ მოიძებნა (RAG Init).")
 
 
-# --- CORS Middleware დამატება ---
+# --- CORS Middleware დამატება (უცვლელი) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*", "http://localhost:8080"], 
@@ -126,7 +136,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- HTML ფაილის ჩატვირთვა და სერვირება ---
+# --- HTML ფაილის ჩატვირთვა და სერვირება (უცვლელი) ---
 try:
     with open("index.html", "r", encoding="utf-8") as f:
         HTML_CONTENT = f.read()
@@ -137,7 +147,7 @@ except FileNotFoundError:
 async def serve_frontend():
     return HTMLResponse(content=HTML_CONTENT, status_code=200)
 
-# --- მონაცემთა მოდელები ---
+# --- მონაცემთა მოდელები (უცვლელი) ---
 class ChatbotRequest(BaseModel):
     prompt: str
     user_id: str
@@ -149,11 +159,11 @@ class ChatbotResponse(BaseModel):
     ai_response: str
     result_data: dict
 
-# --- 1. Gemini API-ს გამოძახება (RAG ლოგიკით) ---
+# --- 1. Gemini API-ს გამოძახება (უცვლელი) ---
 def generate_gemini_content(prompt: str) -> str:
     if not GEMINI_API_KEY:
         return "ERROR: Gemini API გასაღები ვერ მოიძებნა."
-        
+    # ... (დანარჩენი ლოგიკა უცვლელია) ...
     rag_context = ""
     is_rag_active = global_rag_retriever_gemini is not None
     
@@ -225,7 +235,7 @@ def generate_gemini_content(prompt: str) -> str:
             
     return "ERROR: პასუხი ვერ იქნა გენერირებული."
 
-# --- 2. GPT API-ს გამოძახება (RAG ლოგიკით) ---
+# --- 2. GPT API-ს გამოძახება (შეცდომის დამუშავებით) ---
 def generate_gpt_content(prompt: str) -> str:
     if not OPENAI_API_KEY:
         return "ERROR: GPT API გასაღები ვერ მოიძებნა."
@@ -271,13 +281,12 @@ def generate_gpt_content(prompt: str) -> str:
                 timeout=30 
             )
             
-            # 💥💥 განახლებული შეცდომის დამუშავება 💥💥
+            # 💥💥 დეტალური შეცდომის დამუშავება 💥💥
             if response.status_code >= 400:
                 try:
                     error_detail = response.json()
                     openai_error_message = error_detail.get('error', {}).get('message', 'დეტალური შეტყობინება ვერ მიიღეს.')
                     
-                    # დაბრუნებული შეცდომა იქნება ზუსტად ის, რასაც OpenAI აბრუნებს
                     return f"ERROR ({response.status_code}): OpenAI API შეცდომა: {openai_error_message}"
                 except json.JSONDecodeError:
                     return f"ERROR ({response.status_code}): OpenAI-მ დააბრუნა არასტანდარტული პასუხი."
@@ -302,7 +311,7 @@ def generate_gpt_content(prompt: str) -> str:
     return "ERROR: პასუხი ვერ იქნა გენერირებული."
 
 
-# --- API ენდპოინტები ---
+# --- API ენდპოინტები (უცვლელი) ---
 @app.get("/status")
 def read_root():
     rag_gemini_status = "აქტიურია" if global_rag_retriever_gemini else "არააქტიურია (ბაზა ვერ მოიძებნა)"
@@ -351,4 +360,5 @@ async def process_query(
     )
 
 if __name__ == "__main__":
+    # ეს ბლოკი იგნორირებულია uvicorn main:app-ის გამოყენებისას
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8090)))
