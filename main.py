@@ -4,7 +4,7 @@ import requests
 import json
 import time
 from typing import Optional
-from dotenv import load_dotenv
+from dotenv import load_dotenv # დავტოვეთ, მაგრამ პირობითად გამოვიყენებთ
 
 # --- FastAPI და HTML იმპორტები ---
 from fastapi import FastAPI
@@ -26,7 +26,15 @@ except ImportError:
     print("❌ RAG ბიბლიოთეკები ვერ ჩაიტვირთა. RAG არააქტიურია.")
     
 # --- კონფიგურაცია: გასაღებების მოტანა გარემოს ცვლადებიდან ---
-load_dotenv()
+
+# **💥 განახლება: პირობითი ჩატვირთვა**
+# Render-ზე გასაღებები უკვე დაყენებულია გარემოს ცვლადებში.
+# load_dotenv() გაშვებული იქნება მხოლოდ იმ შემთხვევაში, თუ გასაღებები არ მოიძებნა (ლოკალური ტესტირებისთვის).
+
+if not os.environ.get("GEMINI_API_KEY") or not os.environ.get("OPENAI_API_KEY"):
+    print("ℹ️ API გასაღებები ვერ მოიძებნა გარემოს ცვლადებში, ვცდილობთ ჩავტვირთოთ .env-დან.")
+    load_dotenv()
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
 
@@ -38,8 +46,7 @@ OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
 # --- RAG-ის და პერსონის კონფიგურაცია ---
 PERSONA_PDF_PATH = "prompt.pdf" 
-CHROMA_PATH_GEMINI = "chroma_db" 
-CHROMA_PATH_GPT = "chroma_db_gpt" # ეს არის წარმატებული ბაზა, რომელსაც ორივე მოდელი გამოიყენებს
+CHROMA_PATH_GPT = "chroma_db_gpt"
 
 # გლობალური ობიექტები
 global_rag_retriever_gemini: Optional[Chroma.as_retriever] = None
@@ -77,7 +84,7 @@ async def startup_event():
         print("RAG ინიციალიზაცია გამოტოვებულია.")
         return
         
-    # 2. 🤖 GPT RAG ინიციალიზაცია (ეს ბლოკი უნდა იყოს პირველი, რადგან ის ქმნის ბაზას)
+    # 2. 🤖 GPT RAG ინიციალიზაცია 
     if OPENAI_API_KEY:
         os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
         if os.path.exists(CHROMA_PATH_GPT):
@@ -99,21 +106,17 @@ async def startup_event():
 
     # 1. 💎 Gemini RAG ინიციალიზაცია (იყენებს GPT-ის წარმატებულ ბაზას)
     if GEMINI_API_KEY and OPENAI_API_KEY:
-        # 💥 ცვლილება: Gemini RAG იყენებს GPT-ის ვექტორულ ბაზას (chroma_db_gpt)
         if global_rag_retriever_gpt:
-            # თუ GPT-ის რეტრივერი უკვე წარმატებით ჩაიტვირთა, უბრალოდ ვიყენებთ მას
             global_rag_retriever_gemini = global_rag_retriever_gpt
             print(f"✅ Gemini RAG Retriever წარმატებით დაყენდა GPT-ის ბაზაზე: {CHROMA_PATH_GPT}")
         elif os.path.exists(CHROMA_PATH_GPT): 
             try:
-                # თუ GPT-ის რეტრივერი არ ჩაიტვირთა (მაგრამ ბაზა არსებობს), ვცდით მის ხელახლა ჩატვირთვას Gemini-სთვის
                 embeddings_gpt = OpenAIEmbeddings(model="text-embedding-3-small") 
                 vector_store = Chroma(
                     persist_directory=CHROMA_PATH_GPT, 
                     embedding_function=embeddings_gpt
                 )
                 global_rag_retriever_gemini = vector_store.as_retriever(search_kwargs={"k": 3})
-                print(f"✅ Gemini RAG Retriever წარმატებით ჩაიტვირთა GPT-ის ბაზიდან: {CHROMA_PATH_GPT}")
             except Exception as e:
                 print(f"❌ ERROR: Gemini RAG ვერ ჩაიტვირთა GPT-ის ბაზიდან: {e}. არააქტიურია.")
                 global_rag_retriever_gemini = None 
@@ -336,7 +339,6 @@ async def process_query(
         used_model_name = GPT_MODEL_NAME
         is_rag_active = global_rag_retriever_gpt is not None
     else:
-        # ნაგულისხმევად გამოიყენება Gemini
         ai_response = generate_gemini_content(request_data.prompt)
         used_model_name = GEMINI_MODEL_NAME
         is_rag_active = global_rag_retriever_gemini is not None
