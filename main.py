@@ -4,7 +4,6 @@ import requests
 import json
 import time
 from typing import Optional
-# from dotenv import load_dotenv # <--- წაშლილია!
 
 # --- FastAPI და HTML იმპორტები ---
 from fastapi import FastAPI
@@ -23,14 +22,12 @@ try:
     RAG_TOOLS_AVAILABLE = True
 except ImportError:
     RAG_TOOLS_AVAILABLE = False
-    print("❌ RAG ბიბლიოთეკები ვერ ჩაიტვირთა. RAG არააქტიურია.")
+    print("❌ RAG ბიბლიოთეკები ვერ ჩაიტვირთრა. RAG არააქტიურია.")
     
 # --- კონფიგურაცია: გასაღებების მოტანა გარემოს ცვლადებიდან ---
-# ამ ეტაპზე ვეყრდნობით მხოლოდ ჰოსტინგ გარემოს ცვლადებს (Render)
-
+# ვეყრდნობით მხოლოდ Render-ის გარემოს ცვლადებს
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
-# (აქ არაფერი ეწერება load_dotenv-თან დაკავშირებით)
 
 # --- მოდელების და RAG-ის პარამეტრები ---
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
@@ -56,7 +53,7 @@ def load_persona_from_pdf(file_path: str) -> str:
         if not text.strip():
             print(f"❌ ERROR: PDF ფაილი '{file_path}' ცარიელია. გამოყენებულია დეფოლტური პერსონა.")
             return DEFAULT_PERSONA
-        print(f"✅ პერსონის ტექსტი წარმატებით ჩაიტვირთა {file_path}-დან.")
+        print(f"✅ პერსონის ტექსტი წარმატებით ჩაიტვირთრა {file_path}-დან.")
         return text.strip()
     except Exception as e:
         print(f"❌ ERROR: პერსონის PDF-ის წაკითხვისას შეცდომა: {e}. გამოყენებულია დეფოლტური პერსონა.")
@@ -89,13 +86,13 @@ async def startup_event():
                     embedding_function=embeddings_gpt
                 )
                 global_rag_retriever_gpt = vector_store_gpt.as_retriever(search_kwargs={"k": 3})
-                print(f"✅ GPT RAG Retriever წარმატებით ჩაიტვირთა: {CHROMA_PATH_GPT}")
+                print(f"✅ GPT RAG Retriever წარმატებით ჩაიტვირთრა: {CHROMA_PATH_GPT}")
             except Exception as e:
                 print(f"❌ ERROR: GPT ChromaDB-ის ჩატვირთვა ვერ მოხერხდა: {e}.")
         else:
             print(f"⚠️ WARNING: ვექტორული ბაზა {CHROMA_PATH_GPT} ვერ მოიძებნა. GPT RAG არააქტიურია. გაუშვით ingest_gpt.py")
     else:
-        print("❌ ERROR: OpenAI API გასაღები ვერ მოიძებნა.")
+        print("❌ ERROR: OpenAI API გასაღები ვერ მოიძებნა (Startup).")
 
 
     # 1. 💎 Gemini RAG ინიციალიზაცია (იყენებს GPT-ის წარმატებულ ბაზას)
@@ -112,12 +109,12 @@ async def startup_event():
                 )
                 global_rag_retriever_gemini = vector_store.as_retriever(search_kwargs={"k": 3})
             except Exception as e:
-                print(f"❌ ERROR: Gemini RAG ვერ ჩაიტვირთა GPT-ის ბაზიდან: {e}. არააქტიურია.")
+                print(f"❌ ERROR: Gemini RAG ვერ ჩაიტვირთრა GPT-ის ბაზიდან: {e}. არააქტიურია.")
                 global_rag_retriever_gemini = None 
         else:
             print(f"⚠️ WARNING: ვექტორული ბაზა {CHROMA_PATH_GPT} ვერ მოიძებნა. Gemini RAG არააქტიურია.")
     else:
-        print("❌ ERROR: Gemini ან OpenAI API გასაღები ვერ მოიძებნა.")
+        print("❌ ERROR: Gemini ან OpenAI API გასაღები ვერ მოიძებნა (RAG Init).")
 
 
 # --- CORS Middleware დამატება ---
@@ -274,15 +271,17 @@ def generate_gpt_content(prompt: str) -> str:
                 timeout=30 
             )
             
+            # 💥💥 განახლებული შეცდომის დამუშავება 💥💥
             if response.status_code >= 400:
-                error_msg = f"OpenAI API-მ დააბრუნა {response.status_code} შეცდომა."
                 try:
                     error_detail = response.json()
-                    error_msg += f" დეტალები: {error_detail.get('error', {}).get('message', 'დეტალური შეტყობინება ვერ მიიღეს.')}"
+                    openai_error_message = error_detail.get('error', {}).get('message', 'დეტალური შეტყობინება ვერ მიიღეს.')
+                    
+                    # დაბრუნებული შეცდომა იქნება ზუსტად ის, რასაც OpenAI აბრუნებს
+                    return f"ERROR ({response.status_code}): OpenAI API შეცდომა: {openai_error_message}"
                 except json.JSONDecodeError:
-                    pass
-                return f"ERROR: {error_msg}"
-
+                    return f"ERROR ({response.status_code}): OpenAI-მ დააბრუნა არასტანდარტული პასუხი."
+            
             response.raise_for_status() 
             result = response.json()
             
