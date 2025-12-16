@@ -5,7 +5,7 @@ import json
 import time
 from typing import Optional
 
-# --- FastAPI და HTML იმპორტები ---
+#  FastAPI და HTML იმპორტები 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -13,7 +13,7 @@ from pydantic import BaseModel
 import uvicorn
 from pypdf import PdfReader
 
-# --- RAG ინსტრუმენტების იმპორტი ---
+#  RAG ინსტრუმენტების იმპორტი 
 try:
     from langchain_google_genai import GoogleGenerativeAIEmbeddings
     from langchain_openai import OpenAIEmbeddings 
@@ -24,15 +24,15 @@ except ImportError:
     RAG_TOOLS_AVAILABLE = False
     print("❌ RAG ბიბლიოთეკები ვერ ჩაიტვირთრა. RAG არააქტიურია.")
     
-# --- კონფიგურაცია: გასაღებების მოტანა გარემოს ცვლადებიდან ---
+#  გასაღებების მოტანა გარემოს ცვლადებიდან 
 # ამ ცვლადებს ვკითხულობთ მხოლოდ ერთხელ, გაშვების დასაწყისში
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
 
-# 💥💥 დიაგნოსტიკური ლოგირება - ეს ხაზები გამოგვიგზავნეთ! 💥💥
+#  დიაგნოსტიკური ლოგირება 
 print(f"DEBUG: GEMINI_API_KEY სტატუსი: {'✅ აქტიურია' if GEMINI_API_KEY else '❌ ვერ მოიძებნა'}")
 print(f"DEBUG: OPENAI_API_KEY სტატუსი: {'✅ აქტიურია' if OPENAI_API_KEY else '❌ ვერ მოიძებნა'}")
-# 💥💥 დიაგნოსტიკური ლოგირება დასრულდა 💥💥
+# 
 
 # --- მოდელების და RAG-ის პარამეტრები ---
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
@@ -40,7 +40,7 @@ GPT_MODEL_NAME = "gpt-4o-mini"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
-# --- RAG-ის და პერსონის კონფიგურაცია ---
+#  RAG-ის და პერსონის კონფიგურაცია 
 PERSONA_PDF_PATH = "prompt.pdf" 
 CHROMA_PATH_GPT = "chroma_db_gpt"
 
@@ -48,7 +48,7 @@ CHROMA_PATH_GPT = "chroma_db_gpt"
 global_rag_retriever_gemini: Optional[Chroma.as_retriever] = None
 global_rag_retriever_gpt: Optional[Chroma.as_retriever] = None 
 
-# --- ფუნქცია პერსონის PDF-დან ჩასატვირთად (უცვლელი) ---
+#  ფუნქცია პერსონის PDF-დან ჩასატვირთად (უცვლელი) 
 def load_persona_from_pdf(file_path: str) -> str:
     """კითხულობს მთელ ტექსტს PDF ფაილიდან pypdf-ის გამოყენებით."""
     DEFAULT_PERSONA = "თქვენ ხართ სასარგებლო ასისტენტი, რომელიც პასუხობს ქართულ ენაზე."
@@ -67,10 +67,10 @@ def load_persona_from_pdf(file_path: str) -> str:
 
 CUSTOM_PERSONA_TEXT = load_persona_from_pdf(PERSONA_PDF_PATH)
 
-# --- FastAPI აპლიკაციის ინიციალიზაცია ---
+#  FastAPI აპლიკაციის ინიციალიზაცია 
 app = FastAPI(title="Unified LLM Gateway (Gemini & GPT)", version="2.0")
 
-# --- Startup ლოგიკა: RAG ინიციალიზაცია ---
+#  Startup ლოგიკა: RAG ინიციალიზაცია
 @app.on_event("startup")
 async def startup_event():
     global global_rag_retriever_gemini
