@@ -4,7 +4,7 @@ import os
 import sys
 from dotenv import load_dotenv 
 
-# 💥 დაემატა GoogleGenAI, თუ LangChain-ის ვერსია მოძველებულია
+#  დაემატა GoogleGenAI
 try:
     from google import genai as GoogleGenAI
 except ImportError:
@@ -26,7 +26,7 @@ if not GEMINI_API_KEY:
     print("❌ ERROR: Gemini API გასაღები ვერ მოიძებნა. ინდექსირება შეუძლებელია.")
     sys.exit(1)
 
-# 💥 იძულებით დაყენება LangChain-ისთვის და GenAI-სთვის
+#  იძულებით დაყენება LangChain-ისთვის და GenAI-სთვის
 os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY 
 os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY 
 
@@ -63,11 +63,11 @@ def ingest_documents():
         length_function=len
     )
     chunks = text_splitter.split_documents(documents)
-    print(f"📊 დოკუმენტები დანაწილდა {len(chunks)} ფრაგმენტად (Chunks).")
+    print(f" დოკუმენტები დანაწილდა {len(chunks)} ფრაგმენტად (Chunks).")
     
-    print("💾 ვექტორების გენერაცია და ChromaDB-ში შენახვა...")
+    print(" ვექტორების გენერაცია და ChromaDB-ში შენახვა...")
     try:
-        # 💥 მნიშვნელოვანი ცვლილება: API გასაღების ექსპლიციტური გადაცემა
+        #  მნიშვნელოვანი ცვლილება: API გასაღების ექსპლიციტური გადაცემა
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/text-embedding-004",
             api_key=GEMINI_API_KEY 
