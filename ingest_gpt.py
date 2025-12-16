@@ -1,4 +1,4 @@
-# ingest_gpt.py (დარწმუნდით, რომ ეს ფაილი გამოიყენება)
+
 
 import os
 from dotenv import load_dotenv 
