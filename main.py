@@ -34,7 +34,7 @@ print(f"DEBUG: GEMINI_API_KEY სტატუსი: {'✅ აქტიური
 print(f"DEBUG: OPENAI_API_KEY სტატუსი: {'✅ აქტიურია' if OPENAI_API_KEY else '❌ ვერ მოიძებნა'}")
 # 
 
-# --- მოდელების და RAG-ის პარამეტრები ---
+#  მოდელების და RAG-ის პარამეტრები 
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
 GPT_MODEL_NAME = "gpt-4o-mini" 
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
@@ -123,7 +123,7 @@ async def startup_event():
         print("❌ ERROR: Gemini ან OpenAI API გასაღები ვერ მოიძებნა (RAG Init).")
 
 
-# --- CORS Middleware დამატება (უცვლელი) ---
+#  CORS Middleware დამატება (უცვლელი) 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*", "http://localhost:8080"], 
@@ -132,7 +132,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- HTML ფაილის ჩატვირთვა და სერვირება (უცვლელი) ---
+# HTML ფაილის ჩატვირთვა და სერვირება (უცვლელი) 
 try:
     with open("index.html", "r", encoding="utf-8") as f:
         HTML_CONTENT = f.read()
@@ -143,7 +143,7 @@ except FileNotFoundError:
 async def serve_frontend():
     return HTMLResponse(content=HTML_CONTENT, status_code=200)
 
-# --- მონაცემთა მოდელები (უცვლელი) ---
+# მონაცემთა მოდელები (უცვლელი) 
 class ChatbotRequest(BaseModel):
     prompt: str
     user_id: str
@@ -155,7 +155,7 @@ class ChatbotResponse(BaseModel):
     ai_response: str
     result_data: dict
 
-# --- 1. Gemini API-ს გამოძახება (უცვლელი) ---
+# 1. Gemini API-ს გამოძახება (უცვლელი) 
 def generate_gemini_content(prompt: str) -> str:
     if not GEMINI_API_KEY:
         return "ERROR: Gemini API გასაღები ვერ მოიძებნა."
@@ -277,7 +277,7 @@ def generate_gpt_content(prompt: str) -> str:
                 timeout=30 
             )
             
-            # 💥💥 დეტალური შეცდომის დამუშავება 💥💥
+            #  დეტალური შეცდომის დამუშავება 
             if response.status_code >= 400:
                 try:
                     error_detail = response.json()
