@@ -4,6 +4,7 @@ import requests
 import json
 import time
 from typing import Optional
+from dotenv import load_dotenv 
 
 #  FastAPI და HTML იმპორტები 
 from fastapi import FastAPI
@@ -12,6 +13,9 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import uvicorn
 from pypdf import PdfReader
+
+load_dotenv() 
+
 
 #  RAG ინსტრუმენტების იმპორტი 
 try:
