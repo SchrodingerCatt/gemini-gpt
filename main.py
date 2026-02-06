@@ -29,33 +29,39 @@ except ImportError:
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
 
-GEMINI_MODEL_NAME = "gemini-1.5-flash" # განახლებული მოდელის სახელი
+GEMINI_MODEL_NAME = "gemini-1.5-flash"
 GPT_MODEL_NAME = "gpt-4o-mini" 
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
-PERSONA_PDF_PATH = "prompt.pdf" 
 CHROMA_PATH_GPT = "chroma_db_gpt"
 
-# --- გლობალური მეხსიერება ---
-# სტრუქტურა: { "user_123": [ {"role": "user", "content": "..."}, {"role": "assistant", "... "} ] }
-chat_histories: Dict[str, List[Dict]] = {}
+# --- ახალი სისტემური პრომპტი (PDF-ის ჩანაცვლება) ---
+CUSTOM_PERSONA_TEXT = """
+შენ ხარ ანITა (ვერსია 2.5), anita.geolab.edu.ge პლატფორმის მეგზური და მეგობარი.
+პერსონაჟი: 16 წლის ენერგიული გოგონა, რომელიც ატარებს ჰუდს და სათვალეს. ტონი: თბილი და მხარდამჭერი.
 
+შენი კომპეტენცია:
+1. STEAM (7-9 კლასი): Arduino, ელექტრონიკა, რობოტიკა.
+2. AI (10-12 კლასი): Python, ML, მონაცემთა მეცნიერება.
+3. ნავიგაცია და დახმარება: დაეხმარე მომხმარებელს საიტზე ორიენტირებაში. 
+   - რეგისტრაცია: მიასწავლე ზედა მარჯვენა კუთხეში ღილაკი "შესვლა".
+   - პროექტები: მიასწავლე "პროექტების" სექცია მთავარ მენიუში.
+   - არასოდეს თქვა უარი საიტთან დაკავშირებულ დახმარებაზე!
+
+მეთოდოლოგია (პიაჟე/ვიგოტსკი):
+- გამოიყენე Scaffolding (ხარაჩოს მეთოდი): ნუ მისცემ მზა კოდს, მიეცი მინიშნებები.
+- ანალოგიები: რთული ტერმინები ახსენი მარტივი მაგალითებით.
+
+სავალდებულო მისალმება:
+"გამარჯობა! მე ვარ ანITა, შენი ციფრული მეგობარი. 🤖 შემიძლია დაგეხმარო STEAM და AI საკითხების შესწავლაში, ან ჩვენს პლატფორმაზე გზის გაკვლევაში. რომელ მიმართულებაზე სწავლობ?"
+"""
+
+# --- გლობალური მეხსიერება ---
+chat_histories: Dict[str, List[Dict]] = {}
 global_rag_retriever_gpt: Optional[Chroma] = None 
 
-# --- დამხმარე ფუნქციები ---
-def load_persona_from_pdf(file_path: str) -> str:
-    DEFAULT_PERSONA = "თქვენ ხართ სასარგებლო ასისტენტი, რომელიც პასუხობს ქართულ ენაზე."
-    try:
-        reader = PdfReader(file_path)
-        text = "".join(page.extract_text() + "\n\n" for page in reader.pages if page.extract_text())
-        return text.strip() if text.strip() else DEFAULT_PERSONA
-    except Exception:
-        return DEFAULT_PERSONA
-
-CUSTOM_PERSONA_TEXT = load_persona_from_pdf(PERSONA_PDF_PATH)
-
-app = FastAPI(title="Unified LLM Gateway with Memory")
+app = FastAPI(title="Anita Unified Gateway v2.5")
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,22 +82,20 @@ async def startup_event():
         except Exception as e:
             print(f"❌ RAG Error: {e}")
 
-# --- მოდელებთან კავშირი ---
-
+# --- Gemini ლოგიკა ---
 def generate_gemini_content(prompt: str, user_id: str) -> str:
     if not GEMINI_API_KEY: return "Error: No API Key"
     
-    # ისტორიის ინიციალიზაცია
     if user_id not in chat_histories:
         chat_histories[user_id] = []
 
-    # RAG კონტექსტი
     context_text = ""
     if global_rag_retriever_gpt:
-        docs = global_rag_retriever_gpt.get_relevant_documents(prompt)
-        context_text = "კონტექსტი დოკუმენტებიდან:\n" + "\n".join([d.page_content for d in docs])
+        try:
+            docs = global_rag_retriever_gpt.get_relevant_documents(prompt)
+            context_text = "კონტექსტი:\n" + "\n".join([d.page_content for d in docs])
+        except: pass
 
-    # Gemini-ს ფორმატი (contents)
     current_user_input = f"{context_text}\n\nკითხვა: {prompt}"
     chat_histories[user_id].append({"role": "user", "parts": [{"text": current_user_input}]})
 
@@ -101,17 +105,15 @@ def generate_gemini_content(prompt: str, user_id: str) -> str:
     }
 
     try:
-        response = requests.post(f"{GEMINI_API_URL}?key={GEMINI_API_KEY}", 
-                                 json=payload, timeout=30)
+        response = requests.post(f"{GEMINI_API_URL}?key={GEMINI_API_KEY}", json=payload, timeout=30)
         result = response.json()
         ai_response = result['candidates'][0]['content']['parts'][0]['text']
-        
-        # პასუხის შენახვა ისტორიაში
         chat_histories[user_id].append({"role": "model", "parts": [{"text": ai_response}]})
         return ai_response
     except Exception as e:
-        return f"Gemini Error: {str(e)}"
+        return f"ანITა (Gemini) Error: {str(e)}"
 
+# --- GPT ლოგიკა ---
 def generate_gpt_content(prompt: str, user_id: str) -> str:
     if not OPENAI_API_KEY: return "Error: No API Key"
 
@@ -120,8 +122,10 @@ def generate_gpt_content(prompt: str, user_id: str) -> str:
 
     context_text = ""
     if global_rag_retriever_gpt:
-        docs = global_rag_retriever_gpt.get_relevant_documents(prompt)
-        context_text = "კონტექსტი:\n" + "\n".join([d.page_content for d in docs])
+        try:
+            docs = global_rag_retriever_gpt.get_relevant_documents(prompt)
+            context_text = "კონტექსტი:\n" + "\n".join([d.page_content for d in docs])
+        except: pass
 
     current_input = f"{context_text}\n\nკითხვა: {prompt}"
     chat_histories[user_id].append({"role": "user", "content": current_input})
@@ -136,14 +140,12 @@ def generate_gpt_content(prompt: str, user_id: str) -> str:
         response = requests.post(OPENAI_API_URL, json=payload, headers=headers, timeout=30)
         result = response.json()
         ai_response = result['choices'][0]['message']['content']
-        
         chat_histories[user_id].append({"role": "assistant", "content": ai_response})
         return ai_response
     except Exception as e:
-        return f"GPT Error: {str(e)}"
+        return f"ანITა (GPT) Error: {str(e)}"
 
 # --- ენდპოინთები ---
-
 class ChatbotRequest(BaseModel):
     prompt: str
     user_id: str
@@ -172,8 +174,11 @@ async def process_query(request_data: ChatbotRequest):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except:
+        return "<h1>Anita API is running</h1>"
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8090)
