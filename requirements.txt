@@ -1,11 +1,20 @@
+#Backend (FastAPI & Server)
 fastapi
 uvicorn
-python-dotenv
-requests
-pydantic
-pypdf
-langchain-core
+python-multipart
+
+# AI & LLM (Gemini & OpenAI)
+google-generativeai
+openai
+langchain
 langchain-community
-langchain-openai
-langchain-google-genai
+langchain-text-splitters
+
+# Database & PDF Processing
 chromadb
+pypdf
+pypdf2
+
+# Environment & Tools
+python-dotenv
+typing-extensions
