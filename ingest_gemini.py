@@ -1,89 +1,105 @@
-# ingest_gemini.py (განახლებული ვერსია)
-
 import os
-import sys
+import shutil
+import google.generativeai as genai
 from dotenv import load_dotenv 
-
-#  დაემატა GoogleGenAI
-try:
-    from google import genai as GoogleGenAI
-except ImportError:
-    pass 
-    
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_community.vectorstores.chroma import Chroma 
+from langchain_community.vectorstores import Chroma 
+from langchain_core.embeddings import Embeddings
+from typing import List
 
+#  კონფიგურაცია 
 load_dotenv() 
-
-# --- კონფიგურაცია ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 DOCS_DIR = "Steam" 
 CHROMA_PATH = "chroma_db" 
 
-if not GEMINI_API_KEY:
-    print("❌ ERROR: Gemini API გასაღები ვერ მოიძებნა. ინდექსირება შეუძლებელია.")
-    sys.exit(1)
+genai.configure(api_key=GEMINI_API_KEY)
 
-#  იძულებით დაყენება LangChain-ისთვის და GenAI-სთვის
-os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY 
-os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY 
+#  ფუნქცია ხელმისაწვდომი ემბედინგ მოდელის საპოვნელად 
+def get_available_embedding_model():
+    for m in genai.list_models():
+        if 'embedContent' in m.supported_generation_methods:
+            return m.name
+    return None
 
+AVAILABLE_MODEL = get_available_embedding_model()
+if AVAILABLE_MODEL:
+    print(f" ნაპოვნია ხელმისაწვდომი მოდელი: {AVAILABLE_MODEL}")
+else:
+    print(" შეცდომა: ემბედინგის მოდელი ვერ მოიძებნა!")
+
+#  ემბედინგების კლასი 
+class GeminiEmbeddings(Embeddings):
+    def __init__(self, model_name=AVAILABLE_MODEL):
+        self.model_name = model_name
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        batch_size = 50 # შევამციროთ ზომა სტაბილურობისთვის
+        all_embeddings = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            try:
+                # ზოგჯერ v1beta-ში სჭირდება task_type-ის გარეშე ან სხვადასხვა ვერსიით
+                result = genai.embed_content(
+                    model=self.model_name,
+                    content=batch,
+                    task_type="retrieval_document"
+                )
+                all_embeddings.extend(result['embedding'])
+            except Exception as e:
+                print(f" შეცდომა ბატჩზე {i}: {e}")
+                raise e
+        return all_embeddings
+
+    def embed_query(self, text: str) -> List[float]:
+        result = genai.embed_content(
+            model=self.model_name,
+            content=text,
+            task_type="retrieval_query"
+        )
+        return result['embedding']
 
 def ingest_documents():
-    """კითხულობს PDF-ებს, ანაწილებს მათ და ინახავს ChromaDB-ში."""
-    
-    # ... (დოკუმენტების ჩატვირთვის ლოგიკა უცვლელია) ...
-    
-    if not os.path.exists(DOCS_DIR):
-        print(f"❌ ERROR: დოკუმენტების საქაღალდე '{DOCS_DIR}' ვერ მოიძებნა.")
+    if not AVAILABLE_MODEL:
         return
 
+    if not os.path.exists(DOCS_DIR):
+        print(f" საქაღალდე '{DOCS_DIR}' არ არსებობს.")
+        return
+
+    # PDF-ების ჩატვირთვა
     documents = []
-    print(f"🔄 დოკუმენტების ჩატვირთვა საქაღალდიდან: {DOCS_DIR}...")
+    print(f" PDF-ების დამუშავება...")
     pdf_files = [f for f in os.listdir(DOCS_DIR) if f.endswith(".pdf")]
     
     for filename in pdf_files:
-        filepath = os.path.join(DOCS_DIR, filename)
         try:
-            loader = PyPDFLoader(filepath)
+            loader = PyPDFLoader(os.path.join(DOCS_DIR, filename))
             documents.extend(loader.load())
-            print(f"    ✅ ჩაიტვირთა: {filename}")
+            print(f"    done {filename}")
         except Exception as e:
-            print(f"    ❌ შეცდომა ჩატვირთვისას {filename}: {e}")
-            
-    if not documents:
-        print("❌ ERROR: ვერ მოიძებნა PDF ფაილები ჩასატვირთად.")
-        return
+            print(f"    fail {filename}: {e}")
 
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000, 
-        chunk_overlap=200,
-        length_function=len
-    )
+    # დაჭრა
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
     chunks = text_splitter.split_documents(documents)
-    print(f" დოკუმენტები დანაწილდა {len(chunks)} ფრაგმენტად (Chunks).")
-    
-    print(" ვექტორების გენერაცია და ChromaDB-ში შენახვა...")
+    print(f" დაიყო {len(chunks)} ნაწილად.")
+
+    # ბაზის შექმნა
     try:
-        #  მნიშვნელოვანი ცვლილება: API გასაღების ექსპლიციტური გადაცემა
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004",
-            api_key=GEMINI_API_KEY 
-        ) 
+        if os.path.exists(CHROMA_PATH):
+            shutil.rmtree(CHROMA_PATH)
         
         vector_store = Chroma.from_documents(
-            chunks, 
-            embeddings, 
+            documents=chunks,
+            embedding=GeminiEmbeddings(),
             persist_directory=CHROMA_PATH
         )
-        vector_store.persist()
-        print(f"✅ ინდექსირება დასრულდა! მონაცემთა ბაზა შენახულია: {CHROMA_PATH}")
+        print(f" ბაზა წარმატებით შეიქმნა მოდელით: {AVAILABLE_MODEL}")
     except Exception as e:
-        print(f"\n❌ FATAL ERROR: ვექტორების შექმნა ვერ მოხერხდა. დეტალები: {e}")
-        sys.exit(1)
-
+        print(f" კრიტიკული შეცდომა ბაზის შექმნისას: {e}")
 
 if __name__ == "__main__":
     ingest_documents()
