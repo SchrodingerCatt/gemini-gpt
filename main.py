@@ -1,184 +1,113 @@
 import os
-import sys
-import requests
-import json
-import time
-from typing import Optional, List, Dict
-from dotenv import load_dotenv 
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+import datetime
 import uvicorn
+import google.generativeai as genai
+from openai import OpenAI
+from typing import List, Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pypdf import PdfReader
+from langchain_community.vectorstores import Chroma
+from dotenv import load_dotenv
+from ingest_gemini import GeminiEmbeddings 
+import base64
 
-load_dotenv() 
+load_dotenv()
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- RAG ინსტრუმენტების იმპორტი ---
-try:
-    from langchain_openai import OpenAIEmbeddings 
-    from langchain_community.vectorstores.chroma import Chroma
-    from langchain_core.documents import Document
-    RAG_TOOLS_AVAILABLE = True
-except ImportError:
-    RAG_TOOLS_AVAILABLE = False
-    print("❌ RAG ბიბლიოთეკები ვერ ჩაიტვირთრა.")
+#  კონფიგურაცია 
+CHROMA_PATH = "chroma_db"
+PERSONA_PDF = "prompt.pdf"
+MY_GEMINI_MODEL = "gemini-3-flash-preview" 
 
-# --- კონფიგურაცია ---
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") 
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+client_openai = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-GEMINI_MODEL_NAME = "gemini-1.5-flash"
-GPT_MODEL_NAME = "gpt-4o-mini" 
-GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-
-CHROMA_PATH_GPT = "chroma_db_gpt"
-
-# --- ახალი სისტემური პრომპტი (PDF-ის ჩანაცვლება) ---
-CUSTOM_PERSONA_TEXT = """
-შენ ხარ ანITა (ვერსია 2.5), anita.geolab.edu.ge პლატფორმის მეგზური და მეგობარი.
-პერსონაჟი: 16 წლის ენერგიული გოგონა, რომელიც ატარებს ჰუდს და სათვალეს. ტონი: თბილი და მხარდამჭერი.
-
-შენი კომპეტენცია:
-1. STEAM (7-9 კლასი): Arduino, ელექტრონიკა, რობოტიკა.
-2. AI (10-12 კლასი): Python, ML, მონაცემთა მეცნიერება.
-3. ნავიგაცია და დახმარება: დაეხმარე მომხმარებელს საიტზე ორიენტირებაში. 
-   - რეგისტრაცია: მიასწავლე ზედა მარჯვენა კუთხეში ღილაკი "შესვლა".
-   - პროექტები: მიასწავლე "პროექტების" სექცია მთავარ მენიუში.
-   - არასოდეს თქვა უარი საიტთან დაკავშირებულ დახმარებაზე!
-
-მეთოდოლოგია (პიაჟე/ვიგოტსკი):
-- გამოიყენე Scaffolding (ხარაჩოს მეთოდი): ნუ მისცემ მზა კოდს, მიეცი მინიშნებები.
-- ანალოგიები: რთული ტერმინები ახსენი მარტივი მაგალითებით.
-
-სავალდებულო მისალმება:
-"გამარჯობა! მე მქვია ანITა2, შენი ციფრული მეგობარი. 🤖 შემიძლია დაგეხმარო STEAM და AI საკითხების შესწავლაში, ან ჩვენს პლატფორმაზე გზის გაკვლევაში. რომელ მიმართულებაზე სწავლობ?"
-"""
-
-# --- გლობალური მეხსიერება ---
-chat_histories: Dict[str, List[Dict]] = {}
-global_rag_retriever_gpt: Optional[Chroma] = None 
-
-app = FastAPI(title="Anita Unified Gateway v2.5")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("startup")
-async def startup_event():
-    global global_rag_retriever_gpt
-    if RAG_TOOLS_AVAILABLE and OPENAI_API_KEY and os.path.exists(CHROMA_PATH_GPT):
+def load_persona():
+    base_text = ""
+    if os.path.exists(PERSONA_PDF):
         try:
-            embeddings_gpt = OpenAIEmbeddings(model="text-embedding-3-small")
-            vector_store_gpt = Chroma(persist_directory=CHROMA_PATH_GPT, embedding_function=embeddings_gpt)
-            global_rag_retriever_gpt = vector_store_gpt.as_retriever(search_kwargs={"k": 3})
-            print("✅ RAG Retriever მზად არის.")
-        except Exception as e:
-            print(f"❌ RAG Error: {e}")
-
-# --- Gemini ლოგიკა ---
-def generate_gemini_content(prompt: str, user_id: str) -> str:
-    if not GEMINI_API_KEY: return "Error: No API Key"
+            reader = PdfReader(PERSONA_PDF)
+            base_text = "".join([page.extract_text() for page in reader.pages if page.extract_text()])
+        except: base_text = "შენ ხარ ანITა."
     
-    if user_id not in chat_histories:
-        chat_histories[user_id] = []
+    return f"""
+    {base_text}
+    
+    მკაცრი წესები (Strict Handling):
+    1. იყავი მაქსიმალურად მოკლე. თუ მომხმარებელი რამეს გატყობინებს (მაგ: 'მე ვსწავლობ პითონს'), უბრალოდ დაუდასტურე მეგობრულად და ნუ დაიწყებ ახსნას ან დავალებების მოცემას.
+    2. არ ახსნა არცერთი ტექნიკური ტერმინი (მაგ: append, ცვლადი), თუ მომხმარებელმა პირდაპირ არ გკითხა: "ამიხსენი რა არის X".
+    3. თუ გკითხეს "რა მქვია?", უპასუხე მხოლოდ სახელით.
+    4. ნუ დაასრულებ პასუხს კითხვით (მაგ: "გინდა დავიწყოთ?"), თუ მომხმარებელს დახმარება არ უთხოვია.
+    5. თუ კითხვა საერთოდ არ ეხება შენს სფეროს, გამოიყენე სტანდარტული უარი.
+    """
 
-    context_text = ""
-    if global_rag_retriever_gpt:
-        try:
-            docs = global_rag_retriever_gpt.get_relevant_documents(prompt)
-            context_text = "კონტექსტი:\n" + "\n".join([d.page_content for d in docs])
-        except: pass
+SYSTEM_INSTRUCTION = load_persona()
+vector_store = Chroma(persist_directory=CHROMA_PATH, embedding_function=GeminiEmbeddings())
+db = {} 
 
-    current_user_input = f"{context_text}\n\nკითხვა: {prompt}"
-    chat_histories[user_id].append({"role": "user", "parts": [{"text": current_user_input}]})
+def get_user_data(user_id: str):
+    today = str(datetime.date.today())
+    if user_id not in db or db[user_id]["date"] != today:
+        db[user_id] = {"history": [], "media_count": 0, "date": today}
+    return db[user_id]
 
-    payload = {
-        "contents": chat_histories[user_id],
-        "system_instruction": {"parts": [{"text": CUSTOM_PERSONA_TEXT}]}
-    }
+@app.post("/chat")
+async def chat_endpoint(
+    user_id: str = Form(...),
+    prompt: str = Form(...),
+    model_choice: str = Form("gemini"),
+    image: Optional[UploadFile] = File(None),
+    audio: Optional[UploadFile] = File(None)
+):
+    user_info = get_user_data(user_id)
+    has_media = image is not None or audio is not None
+
+    if has_media and user_info["media_count"] >= 3:
+        raise HTTPException(status_code=429, detail="მედია ლიმიტი (3) ამოწურულია.")
+
+    # Chroma DB ძებნა
+    docs = vector_store.similarity_search(prompt, k=2)
+    
+    #  ტესტირებისთვის: ტერმინალში დაგიწერთ რას პოულობს DB 
+    print(f"\nDEBUG: Chroma DB-მ იპოვა {len(docs)} შესაბამისი ნაწყვეტი.")
+    for i, d in enumerate(docs):
+        print(f"ნაწყვეტი {i+1}: {d.page_content[:100]}...")
+    
+
+    context = "\n".join([d.page_content for d in docs])
+    full_query = f"დამხმარე მასალა (გამოიყენე მხოლოდ თუ კითხვა ტექნიკურია): {context}\n\nმომხმარებელი ამბობს: {prompt}"
 
     try:
-        response = requests.post(f"{GEMINI_API_URL}?key={GEMINI_API_KEY}", json=payload, timeout=30)
-        result = response.json()
-        ai_response = result['candidates'][0]['content']['parts'][0]['text']
-        chat_histories[user_id].append({"role": "model", "parts": [{"text": ai_response}]})
-        return ai_response
-    except Exception as e:
-        return f"ანITა (Gemini) Error: {str(e)}"
+        if model_choice == "gpt":
+            messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
+            content = [{"type": "text", "text": full_query}]
+            if image:
+                img_b64 = base64.b64encode(await image.read()).decode('utf-8')
+                content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}})
+            messages.append({"role": "user", "content": content})
+            res = client_openai.chat.completions.create(model="gpt-4o", messages=messages)
+            ai_text = res.choices[0].message.content
+        else:
+            model = genai.GenerativeModel(model_name=MY_GEMINI_MODEL, system_instruction=SYSTEM_INSTRUCTION)
+            chat_session = model.start_chat(history=user_info["history"])
+            parts = [full_query]
+            if image: parts.append({"mime_type": image.content_type, "data": await image.read()})
+            if audio: parts.append({"mime_type": audio.content_type, "data": await audio.read()})
+            
+            response = chat_session.send_message(parts)
+            ai_text = response.text
 
-# --- GPT ლოგიკა ---
-def generate_gpt_content(prompt: str, user_id: str) -> str:
-    if not OPENAI_API_KEY: return "Error: No API Key"
-
-    if user_id not in chat_histories:
-        chat_histories[user_id] = [{"role": "system", "content": CUSTOM_PERSONA_TEXT}]
-
-    context_text = ""
-    if global_rag_retriever_gpt:
-        try:
-            docs = global_rag_retriever_gpt.get_relevant_documents(prompt)
-            context_text = "კონტექსტი:\n" + "\n".join([d.page_content for d in docs])
-        except: pass
-
-    current_input = f"{context_text}\n\nკითხვა: {prompt}"
-    chat_histories[user_id].append({"role": "user", "content": current_input})
-
-    payload = {
-        "model": GPT_MODEL_NAME,
-        "messages": chat_histories[user_id]
-    }
-
-    try:
-        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-        response = requests.post(OPENAI_API_URL, json=payload, headers=headers, timeout=30)
-        result = response.json()
-        ai_response = result['choices'][0]['message']['content']
-        chat_histories[user_id].append({"role": "assistant", "content": ai_response})
-        return ai_response
-    except Exception as e:
-        return f"ანITა (GPT) Error: {str(e)}"
-
-# --- ენდპოინთები ---
-class ChatbotRequest(BaseModel):
-    prompt: str
-    user_id: str
-    model_choice: str = "gemini"
-
-class ChatbotResponse(BaseModel):
-    status: str
-    ai_response: str
-    user_id: str
-
-@app.post("/process_query", response_model=ChatbotResponse)
-async def process_query(request_data: ChatbotRequest):
-    model = request_data.model_choice.lower()
-    uid = request_data.user_id
-    
-    if model == "gpt":
-        ai_response = generate_gpt_content(request_data.prompt, uid)
-    else:
-        ai_response = generate_gemini_content(request_data.prompt, uid)
+        user_info["history"].append({"role": "user", "parts": [prompt]})
+        user_info["history"].append({"role": "model", "parts": [ai_text]})
         
-    return ChatbotResponse(
-        status="success",
-        ai_response=ai_response,
-        user_id=uid
-    )
+        if has_media:
+            user_info["media_count"] += 1
 
-@app.get("/", response_class=HTMLResponse)
-async def serve_index():
-    try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            return f.read()
-    except:
-        return "<h1>Anita API is running</h1>"
+        return {"response": ai_text, "media_remaining": 3 - user_info["media_count"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8090)
