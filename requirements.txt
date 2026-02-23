@@ -1,4 +1,4 @@
-#Backend (FastAPI & Server)
+# Backend (FastAPI & Server)
 fastapi
 uvicorn
 python-multipart
@@ -9,6 +9,7 @@ openai
 langchain
 langchain-community
 langchain-text-splitters
+langchain-google-genai
 
 # Database & PDF Processing
 chromadb
@@ -18,3 +19,6 @@ pypdf2
 # Environment & Tools
 python-dotenv
 typing-extensions
+
+# Linux Server Fixes 
+pysqlite3-binary
