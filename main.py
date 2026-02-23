@@ -1,28 +1,42 @@
 import os
 import datetime
 import uvicorn
+import base64
 import google.generativeai as genai
 from openai import OpenAI
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pypdf import PdfReader
 from langchain_community.vectorstores import Chroma
 from dotenv import load_dotenv
 from ingest_gemini import GeminiEmbeddings 
-import base64
+
+
+try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass 
 
 load_dotenv()
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-#  კონფიგურაცია 
+# კონფიგურაცია
 CHROMA_PATH = "chroma_db"
 PERSONA_PDF = "prompt.pdf"
 MY_GEMINI_MODEL = "gemini-3-flash-preview" 
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 client_openai = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# ლოკალზე ტესტირებისთვის: index.html-ის პირდაპირ გახსნა
+@app.get("/")
+async def read_index():
+    return FileResponse('index.html')
 
 def load_persona():
     base_text = ""
@@ -41,6 +55,7 @@ def load_persona():
     3. თუ გკითხეს "რა მქვია?", უპასუხე მხოლოდ სახელით.
     4. ნუ დაასრულებ პასუხს კითხვით (მაგ: "გინდა დავიწყოთ?"), თუ მომხმარებელს დახმარება არ უთხოვია.
     5. თუ კითხვა საერთოდ არ ეხება შენს სფეროს, გამოიყენე სტანდარტული უარი.
+    6.გამოიყენე ემოჯები 😊, 🤖, ✨, რომ საუბარი უფრო ბუნებრივი იყოს.
     """
 
 SYSTEM_INSTRUCTION = load_persona()
@@ -63,21 +78,19 @@ async def chat_endpoint(
 ):
     user_info = get_user_data(user_id)
     has_media = image is not None or audio is not None
-
     if has_media and user_info["media_count"] >= 3:
-        raise HTTPException(status_code=429, detail="მედია ლიმიტი (3) ამოწურულია.")
+        raise HTTPException(status_code=429, detail="მედია ლიმიტი ამოწურულია.")
 
-    # Chroma DB ძებნა
+    # --- Chroma DB-ში ძებნა და დებაგინგი ---
     docs = vector_store.similarity_search(prompt, k=2)
     
-    #  ტესტირებისთვის: ტერმინალში დაგიწერთ რას პოულობს DB 
-    print(f"\nDEBUG: Chroma DB-მ იპოვა {len(docs)} შესაბამისი ნაწყვეტი.")
+    print(f"\n[DEBUG] Chroma DB-მ იპოვა {len(docs)} შესაბამისი ნაწყვეტი.")
     for i, d in enumerate(docs):
-        print(f"ნაწყვეტი {i+1}: {d.page_content[:100]}...")
-    
+        print(f"ნაწყვეტი {i+1}: {d.page_content[:150]}...")
+    # --------------------------------------
 
     context = "\n".join([d.page_content for d in docs])
-    full_query = f"დამხმარე მასალა (გამოიყენე მხოლოდ თუ კითხვა ტექნიკურია): {context}\n\nმომხმარებელი ამბობს: {prompt}"
+    full_query = f"დამხმარე მასალა: {context}\n\nმომხმარებელი: {prompt}"
 
     try:
         if model_choice == "gpt":
@@ -95,19 +108,16 @@ async def chat_endpoint(
             parts = [full_query]
             if image: parts.append({"mime_type": image.content_type, "data": await image.read()})
             if audio: parts.append({"mime_type": audio.content_type, "data": await audio.read()})
-            
             response = chat_session.send_message(parts)
             ai_text = response.text
 
         user_info["history"].append({"role": "user", "parts": [prompt]})
         user_info["history"].append({"role": "model", "parts": [ai_text]})
-        
-        if has_media:
-            user_info["media_count"] += 1
-
+        if has_media: user_info["media_count"] += 1
         return {"response": ai_text, "media_remaining": 3 - user_info["media_count"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8090)
+    port = int(os.environ.get("PORT", 8090))
+    uvicorn.run(app, host="0.0.0.0", port=port)
