@@ -69,6 +69,7 @@
         let mediaRecorder, audioChunks = [], audioBlob = null, isRecording = false, isWaiting = false;
         const chatBox = document.getElementById('chatBox');
 
+        // Microphone Logic
         document.getElementById('recordBtn').onclick = async () => {
             if (isWaiting) return;
             if (!isRecording) {
@@ -91,15 +92,19 @@
             }
         };
 
+        // Main Send Function
         async function send() {
-            const prompt = document.getElementById('promptInp').value.trim();
+            const promptInp = document.getElementById('promptInp');
+            const prompt = promptInp.value.trim();
             const imgInput = document.getElementById('imgInp');
             const imgFile = imgInput.files[0];
+            
             if (isWaiting || (!prompt && !imgFile && !audioBlob)) return;
 
             isWaiting = true;
             document.getElementById('inputSection').classList.add('is-waiting');
 
+            // Add User Message to UI
             let userHtml = `<div class="user-bubble chat-bubble flex flex-col gap-2">`;
             if (prompt) userHtml += `<span>${prompt}</span>`;
             if (imgFile) userHtml += `<img src="${URL.createObjectURL(imgFile)}" class="rounded-lg max-h-48 shadow-sm">`;
@@ -107,10 +112,12 @@
             userHtml += `</div>`;
             chatBox.innerHTML += userHtml;
 
+            // Add Typing Indicator
             const typingId = "typing-" + Date.now();
             chatBox.innerHTML += `<div id="${typingId}" class="ai-bubble chat-bubble typing-container shadow-sm"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
 
+            // Prepare Data
             const fd = new FormData();
             fd.append("user_id", "session_user_1");
             fd.append("prompt", prompt || "აღწერე ფაილი");
@@ -118,23 +125,34 @@
             if (imgFile) fd.append("image", imgFile);
             if (audioBlob) fd.append("audio", audioBlob, "voice_msg.webm");
 
+            // Smart URL selection
+            const API_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+                ? 'http://127.0.0.1:8090/chat'
+                : '/chat';
+
             try {
-                const res = await fetch('http://localhost:8090/chat', { method: 'POST', body: fd });
+                const res = await fetch(API_URL, { method: 'POST', body: fd });
                 const data = await res.json();
+                
                 const tElem = document.getElementById(typingId);
                 if(tElem) tElem.remove();
+
                 if (res.ok) {
                     chatBox.innerHTML += `<div class="ai-bubble chat-bubble shadow-sm">${data.response}</div>`;
                     document.getElementById('limitTxt').innerText = `მედია ლიმიტი: ${data.media_remaining}/3`;
-                } else { chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-500">შეცდომა: ${data.detail}</div>`; }
+                } else { 
+                    chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-500">შეცდომა: ${data.detail}</div>`; 
+                }
             } catch (e) {
                 const tElem = document.getElementById(typingId);
                 if(tElem) tElem.remove();
-                chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-400 italic text-xs">კავშირი ვერ დამყარდა...</div>`;
+                chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-400 italic text-xs">კავშირი ვერ დამყარდა. დარწმუნდი, რომ ბექენდი ჩართულია.</div>`;
             }
+
+            // Cleanup
             isWaiting = false;
             document.getElementById('inputSection').classList.remove('is-waiting');
-            document.getElementById('promptInp').value = "";
+            promptInp.value = "";
             imgInput.value = "";
             audioBlob = null;
             chatBox.scrollTop = chatBox.scrollHeight;
