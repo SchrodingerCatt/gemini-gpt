@@ -4,7 +4,8 @@ uvicorn
 python-multipart
 
 # AI & LLM (Gemini & OpenAI)
-google-generativeai
+# აუცილებელია 0.8.0-ზე მაღალი ვერსია Gemini 2.5-ისთვის
+google-generativeai>=0.8.0
 openai
 langchain
 langchain-community
@@ -13,8 +14,8 @@ langchain-google-genai
 
 # Database & PDF Processing
 chromadb
+# pypdf2 ამოღებულია
 pypdf
-pypdf2
 
 # Environment & Tools
 python-dotenv
