@@ -28,7 +28,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # კონფიგურაცია
 CHROMA_PATH = "chroma_db"
 PERSONA_PDF = "prompt.pdf"
-MY_GEMINI_MODEL = "gemini-3-flash-preview" 
+MY_GEMINI_MODEL = "gemini-2.5-flash" 
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 client_openai = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
