@@ -119,5 +119,7 @@ async def chat_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
+    import uvicorn
+    # თუ გარემო ცვლადი PORT არ არსებობს, გამოიყენებს 8090-ს
     port = int(os.environ.get("PORT", 8090))
     uvicorn.run(app, host="0.0.0.0", port=port)
