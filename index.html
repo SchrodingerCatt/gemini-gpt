@@ -126,10 +126,7 @@
             if (audioBlob) fd.append("audio", audioBlob, "voice_msg.webm");
 
             // Smart URL selection
-            // Smart URL selection
-           const API_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-                 ? 'http://127.0.0.1:8090/chat'
-                : window.location.origin + '/chat';
+            const API_URL = window.location.origin + '/chat';
 
             try {
                 const res = await fetch(API_URL, { method: 'POST', body: fd });
