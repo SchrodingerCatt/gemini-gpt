@@ -28,15 +28,21 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # კონფიგურაცია
 CHROMA_PATH = "chroma_db"
 PERSONA_PDF = "prompt.pdf"
-MY_GEMINI_MODEL = "gemini-2.5-flash" 
+MY_GEMINI_MODEL = "gemini-2.5-flash"
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 client_openai = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # ლოკალზე ტესტირებისთვის: index.html-ის პირდაპირ გახსნა
-@app.get("/")
+from fastapi.responses import HTMLResponse
+
+@app.get("/", response_class=HTMLResponse)
 async def read_index():
-    return FileResponse('index.html')
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"შეცდომა ფაილის წაკითხვისას: {str(e)}"
 
 def load_persona():
     base_text = ""
@@ -119,7 +125,5 @@ async def chat_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    import uvicorn
-    # თუ გარემო ცვლადი PORT არ არსებობს, გამოიყენებს 8090-ს
     port = int(os.environ.get("PORT", 8090))
     uvicorn.run(app, host="0.0.0.0", port=port)
