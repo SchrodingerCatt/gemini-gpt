@@ -36,7 +36,7 @@ app.add_middleware(
 
 # 3. კონფიგურაცია აბსოლუტური გზებით
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
+CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db_new_v25")
 PERSONA_PDF = os.path.join(BASE_DIR, "prompt.pdf")
 MY_GEMINI_MODEL = "gemini-2.5-flash" # შენი მოდელი
 
