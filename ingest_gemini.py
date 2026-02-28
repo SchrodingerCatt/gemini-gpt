@@ -1,5 +1,14 @@
 import os
+import sys
 import shutil
+
+# 1. SQLite ფიქსაცია სერვერისთვის (აუცილებელია Chroma-სთვის)
+try:
+    import pysqlite3
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except (ImportError, KeyError):
+    pass
+
 import google.generativeai as genai
 from dotenv import load_dotenv 
 from langchain_community.document_loaders import PyPDFLoader
@@ -8,13 +17,17 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.embeddings import Embeddings
 from typing import List
 
-#  კონფიგურაცია 
+# კონფიგურაცია 
 load_dotenv() 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-DOCS_DIR = "Steam" 
-CHROMA_PATH = "chroma_db" 
+
+# აბსოლუტური გზების განსაზღვრა
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOCS_DIR = os.path.join(BASE_DIR, "Steam") 
+CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db") 
 
 genai.configure(api_key=GEMINI_API_KEY)
+
 
 #  ფუნქცია ხელმისაწვდომი ემბედინგ მოდელის საპოვნელად 
 def get_available_embedding_model():
