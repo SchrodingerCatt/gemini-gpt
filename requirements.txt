@@ -1,10 +1,9 @@
-# Backend (FastAPI & Server)
+# Backend
 fastapi
 uvicorn
 python-multipart
 
-# AI & LLM (Gemini & OpenAI)
-# აუცილებელია 0.8.0-ზე მაღალი ვერსია Gemini 2.5-ისთვის
+# AI & LLM
 google-generativeai>=0.8.0
 openai
 langchain
@@ -12,14 +11,11 @@ langchain-community
 langchain-text-splitters
 langchain-google-genai
 
-# Database & PDF Processing
+# Database & PDF
 chromadb
-# pypdf2 ამოღებულია
 pypdf
 
-# Environment & Tools
+# Environment & Fixes
 python-dotenv
 typing-extensions
-
-# Linux Server Fixes 
 pysqlite3-binary
