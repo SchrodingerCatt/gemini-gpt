@@ -35,7 +35,7 @@
                 </div>
             </div>
             <select id="modelSelect" class="text-[10px] bg-gray-100 font-bold p-2 rounded-lg outline-none cursor-pointer">
-                <option value="gemini">GEMINI 2.0 FLASH</option>
+                <option value="gemini">GEMINI 2.5 FLASH</option>
                 <option value="gpt">GPT-4o VISION</option>
             </select>
         </div>
@@ -97,7 +97,7 @@
             isWaiting = true;
             document.getElementById('inputSection').classList.add('is-waiting');
 
-            // UI Update: User Message
+            // UI: User Message Display
             let userHtml = `<div class="user-bubble chat-bubble flex flex-col gap-2">`;
             if (prompt) userHtml += `<span>${prompt}</span>`;
             if (imgFile) userHtml += `<img src="${URL.createObjectURL(imgFile)}" class="rounded-lg max-h-48 shadow-sm">`;
@@ -110,7 +110,6 @@
             chatBox.innerHTML += `<div id="${typingId}" class="ai-bubble chat-bubble typing-container shadow-sm"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            // FormData Preparation
             const fd = new FormData();
             fd.append("user_id", "session_user_1");
             fd.append("prompt", prompt || "აღწერე ფაილი");
@@ -119,7 +118,7 @@
             if (audioBlob) fd.append("audio", audioBlob, "voice_msg.webm");
 
             try {
-                // ფარდობითი გზა, რომელიც იმუშავებს ნებისმიერ ჰოსტინგზე
+                // იყენებს ფარდობით გზას, რაც მუშაობს ნებისმიერ ჰოსტინგზე (Render/Railway)
                 const response = await fetch('/chat', {
                     method: 'POST',
                     body: fd
@@ -137,7 +136,7 @@
                     chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-500 italic">შეცდომა: ${data.detail || 'სერვერული პრობლემა'}</div>`;
                 }
             } catch (error) {
-                document.getElementById(typingId)?.remove();
+                if(document.getElementById(typingId)) document.getElementById(typingId).remove();
                 chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-400 italic text-xs">ვერ ვუკავშირდები სერვერს. დარწმუნდი, რომ ბექენდი ჩართულია.</div>`;
             }
 
