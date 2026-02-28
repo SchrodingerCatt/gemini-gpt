@@ -1,4 +1,13 @@
+import sys
 import os
+
+# 1. SQLite ფიქსაცია (აუცილებელია სერვერისთვის)
+try:
+    import pysqlite3
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except (ImportError, KeyError):
+    pass
+
 import datetime
 import uvicorn
 import base64
@@ -7,28 +16,29 @@ from openai import OpenAI
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pypdf import PdfReader
 from langchain_community.vectorstores import Chroma
 from dotenv import load_dotenv
 from ingest_gemini import GeminiEmbeddings 
 
-
-try:
-    __import__('pysqlite3')
-    import sys
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-except ImportError:
-    pass 
-
 load_dotenv()
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# კონფიგურაცია
-CHROMA_PATH = "chroma_db"
-PERSONA_PDF = "prompt.pdf"
-MY_GEMINI_MODEL = "gemini-2.5-flash"
+# 2. CORS კონფიგურაცია - მუშაობს ყველგან (localhost, render, vercel და ა.შ.)
+app.add_middleware(
+    CORSMiddleware, 
+    allow_origins=["*"], 
+    allow_credentials=False, # აუცილებელია False, როცა allow_origins=["*"]
+    allow_methods=["*"], 
+    allow_headers=["*"]
+)
+
+# 3. კონფიგურაცია აბსოლუტური გზებით
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
+PERSONA_PDF = os.path.join(BASE_DIR, "prompt.pdf")
+MY_GEMINI_MODEL = "gemini-2.5-flash" # შენი მოდელი
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 client_openai = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
