@@ -1,9 +1,9 @@
 #!/bin/bash
-python3.11 -c "
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# 1. vectoruli bazis momzadeba
+echo "Step 1: Ingesting data"
+python3.11 ingest_gemini.py
 
-# Now run main.py
-exec(open('main.py').read())
+# 2. serveris gashveba
+echo "Step 2: Starting API server"
+python3.11 main.py
 "
