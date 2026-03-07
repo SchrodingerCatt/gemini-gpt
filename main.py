@@ -84,7 +84,7 @@ def get_user_data(user_id: str):
         db[user_id] = {"history": [], "media_count": 0, "date": today}
     return db[user_id]
 
-@app.post("/process_query")
+@app.post("/send")
 async def chat_endpoint(
     user_id: str = Form(...),
     prompt: str = Form(...),
