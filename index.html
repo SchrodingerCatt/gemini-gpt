@@ -31,7 +31,7 @@
                 </div>
                 <div>
                     <h2 class="font-bold text-gray-800 text-sm">ანITა</h2>
-                    <p id="limitTxt" class="text-[9px] text-gray-500 font-bold uppercase">მედია ლიმიტი: 3/3</p>
+                    <p id="limitTxt" class="text-[9px] text-gray-500 font-bold uppercase">მედია ლიმიტი: 1000/1000</p>
                 </div>
             </div>
             <select id="modelSelect" class="text-[10px] bg-gray-100 font-bold p-2 rounded-lg outline-none cursor-pointer">
@@ -130,7 +130,7 @@
                 if (response.ok) {
                     chatBox.innerHTML += `<div class="ai-bubble chat-bubble shadow-sm">${data.response}</div>`;
                     if (data.media_remaining !== undefined) {
-                        document.getElementById('limitTxt').innerText = `მედია ლიმიტი: ${data.media_remaining}/3`;
+                        document.getElementById('limitTxt').innerText = `მედია ლიმიტი: ${data.media_remaining}/1000`;
                     }
                 } else {
                     chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-500 italic">შეცდომა: ${data.detail || 'სერვერული პრობლემა'}</div>`;
