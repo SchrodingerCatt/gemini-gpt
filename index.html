@@ -61,92 +61,116 @@
         </div>
     </div>
 
-    <script>
-        let mediaRecorder, audioChunks = [], audioBlob = null, isRecording = false, isWaiting = false;
-        const chatBox = document.getElementById('chatBox');
+   <script>
+    let mediaRecorder, audioChunks = [], audioBlob = null, isRecording = false, isWaiting = false;
+    const chatBox = document.getElementById('chatBox');
 
-        // Microphone Logic
-        document.getElementById('recordBtn').onclick = async () => {
-            if (isWaiting) return;
-            if (!isRecording) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-                    audioChunks = [];
-                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                    mediaRecorder.onstop = () => { audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); };
-                    mediaRecorder.start();
-                    isRecording = true;
-                    document.getElementById('recordBtn').innerHTML = '<i class="fas fa-stop text-red-500 animate-pulse"></i>';
-                } catch (err) { alert("მიკროფონთან წვდომა უარყოფილია"); }
-            } else {
-                mediaRecorder.stop();
-                isRecording = false;
-                document.getElementById('recordBtn').innerHTML = '<i class="fas fa-microphone"></i>';
-            }
-        };
-
-        async function send() {
-            const promptInp = document.getElementById('promptInp');
-            const prompt = promptInp.value.trim();
-            const imgInput = document.getElementById('imgInp');
-            const imgFile = imgInput.files[0];
-            
-            if (isWaiting || (!prompt && !imgFile && !audioBlob)) return;
-
-            isWaiting = true;
-            document.getElementById('inputSection').classList.add('is-waiting');
-
-            // UI: User Message Display
-            let userHtml = `<div class="user-bubble chat-bubble flex flex-col gap-2">`;
-            if (prompt) userHtml += `<span>${prompt}</span>`;
-            if (imgFile) userHtml += `<img src="${URL.createObjectURL(imgFile)}" class="rounded-lg max-h-48 shadow-sm">`;
-            if (audioBlob) userHtml += `<audio controls src="${URL.createObjectURL(audioBlob)}" class="w-48 h-8"></audio>`;
-            userHtml += `</div>`;
-            chatBox.innerHTML += userHtml;
-
-            // Typing Indicator
-            const typingId = "typing-" + Date.now();
-            chatBox.innerHTML += `<div id="${typingId}" class="ai-bubble chat-bubble typing-container shadow-sm"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
-
-            const fd = new FormData();
-            fd.append("user_id", "session_user_1");
-            fd.append("prompt", prompt || "აღწერე ფაილი");
-            fd.append("model_choice", document.getElementById('modelSelect').value);
-            if (imgFile) fd.append("image", imgFile);
-            if (audioBlob) fd.append("audio", audioBlob, "voice_msg.webm");
-
+    // მიკროფონის ლოგიკა
+    document.getElementById('recordBtn').onclick = async () => {
+        if (isWaiting) return;
+        if (!isRecording) {
             try {
-                // იყენებს ფარდობით გზას, რაც მუშაობს ნებისმიერ ჰოსტინგზე (Render/Railway)
-                const response = await fetch('/process_query', {
-                    method: 'POST',
-                    body: fd
-                });
-
-                const data = await response.json();
-                document.getElementById(typingId)?.remove();
-
-                if (response.ok) {
-                    chatBox.innerHTML += `<div class="ai-bubble chat-bubble shadow-sm">${data.response}</div>`;
-                    if (data.media_remaining !== undefined) {
-                        document.getElementById('limitTxt').innerText = `მედია ლიმიტი: ${data.media_remaining}/1000`;
-                    }
-                } else {
-                    chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-500 italic">შეცდომა: ${data.detail || 'სერვერული პრობლემა'}</div>`;
-                }
-            } catch (error) {
-                if(document.getElementById(typingId)) document.getElementById(typingId).remove();
-                chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-400 italic text-xs">ვერ ვუკავშირდები სერვერს. დარწმუნდი, რომ ბექენდი ჩართულია.</div>`;
-            }
-
-            isWaiting = false;
-            document.getElementById('inputSection').classList.remove('is-waiting');
-            promptInp.value = "";
-            imgInput.value = "";
-            audioBlob = null;
-            chatBox.scrollTop = chatBox.scrollHeight;
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = () => { 
+                    audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); 
+                    console.log("ხმა ჩაწერილია:", audioBlob.size, "ბაიტი");
+                };
+                mediaRecorder.start();
+                isRecording = true;
+                document.getElementById('recordBtn').innerHTML = '<i class="fas fa-stop text-red-500 animate-pulse"></i>';
+            } catch (err) { alert("მიკროფონთან წვდომა უარყოფილია"); }
+        } else {
+            mediaRecorder.stop();
+            isRecording = false;
+            document.getElementById('recordBtn').innerHTML = '<i class="fas fa-microphone"></i>';
         }
-    </script>
+    };
+
+    async function send() {
+        const promptInp = document.getElementById('promptInp');
+        const prompt = promptInp.value.trim();
+        const imgInput = document.getElementById('imgInp');
+        const imgFile = imgInput.files[0];
+        
+        // თუ ჩაწერა პროცესშია, ჯერ გავაჩეროთ
+        if (isRecording) {
+            mediaRecorder.stop();
+            isRecording = false;
+            document.getElementById('recordBtn').innerHTML = '<i class="fas fa-microphone"></i>';
+            // მცირე დაყოვნება რომ Blob შეიქმნას
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        if (isWaiting || (!prompt && !imgFile && !audioBlob)) return;
+
+        isWaiting = true;
+        document.getElementById('inputSection').classList.add('is-waiting');
+
+        // UI: მომხმარებლის შეტყობინება
+        let userHtml = `<div class="user-bubble chat-bubble flex flex-col gap-2">`;
+        if (prompt) userHtml += `<span>${prompt}</span>`;
+        if (imgFile) userHtml += `<img src="${URL.createObjectURL(imgFile)}" class="rounded-lg max-h-48 shadow-sm">`;
+        if (audioBlob) userHtml += `<audio controls src="${URL.createObjectURL(audioBlob)}" class="w-48 h-8"></audio>`;
+        userHtml += `</div>`;
+        chatBox.innerHTML += userHtml;
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // FormData-ს მომზადება
+        const fd = new FormData();
+        fd.append("user_id", "session_user_1");
+        fd.append("prompt", prompt || (imgFile ? "აღწერე ეს ფოტო" : "მოუსმინე ამ ვოისს"));
+        fd.append("model_choice", document.getElementById('modelSelect').value);
+        
+        if (imgFile) {
+            console.log("ვამატებ ფოტოს:", imgFile.name);
+            fd.append("image", imgFile); 
+        }
+        if (audioBlob) {
+            console.log("ვამატებ აუდიოს, ზომა:", audioBlob.size);
+            fd.append("audio", audioBlob, "voice_msg.webm"); 
+        }
+
+        // Typing Indicator
+        const typingId = "typing-" + Date.now();
+        chatBox.innerHTML += `<div id="${typingId}" class="ai-bubble chat-bubble typing-container shadow-sm"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            const response = await fetch('/process_query', {
+                method: 'POST',
+                body: fd
+                // ყურადღება: Content-Type აქ არ მიეთითება! ბრაუზერი თავად სვამს Multipart-ს
+            });
+
+            const data = await response.json();
+            document.getElementById(typingId)?.remove();
+
+            if (response.ok) {
+                chatBox.innerHTML += `<div class="ai-bubble chat-bubble shadow-sm">${data.response}</div>`;
+                if (data.media_remaining !== undefined) {
+                    // ლიმიტის განახლება 1000-მდე
+                    document.getElementById('limitTxt').innerText = `მედია ლიმიტი: ${data.media_remaining}/1000`;
+                }
+            } else {
+                chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-500 italic">შეცდომა: ${data.detail || 'სერვერული პრობლემა'}</div>`;
+            }
+        } catch (error) {
+            console.error("Fetch error:", error);
+            if(document.getElementById(typingId)) document.getElementById(typingId).remove();
+            chatBox.innerHTML += `<div class="ai-bubble chat-bubble text-red-400 italic text-xs">კავშირის შეცდომა. შეამოწმე სერვერი.</div>`;
+        }
+
+        // გასუფთავება
+        isWaiting = false;
+        document.getElementById('inputSection').classList.remove('is-waiting');
+        promptInp.value = "";
+        imgInput.value = "";
+        audioBlob = null;
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
 </body>
 </html>
