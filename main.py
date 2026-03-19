@@ -93,6 +93,14 @@ async def chat_endpoint(
     audio: Optional[UploadFile] = File(None)
 ):
     user_info = get_user_data(user_id)
+    # --- დაამატე ეს ხაზები აქედან ---
+    if image:
+        print(f"[DEBUG] მოვიდა ფოტო: {image.filename}", flush=True)
+    if audio:
+        print(f"[DEBUG] მოვიდა აუდიო: {audio.filename}", flush=True)
+    if not image and not audio:
+        print("[DEBUG] მედია ფაილი არ მოსულა (მხოლოდ ტექსტი)", flush=True)
+    # --- აქამდე ---
     has_media = image is not None or audio is not None
     if has_media and user_info["media_count"] >= 1000:
         raise HTTPException(status_code=429, detail="მედია ლიმიტი ამოწურულია.")
@@ -130,7 +138,7 @@ async def chat_endpoint(
         user_info["history"].append({"role": "user", "parts": [prompt]})
         user_info["history"].append({"role": "model", "parts": [ai_text]})
         if has_media: user_info["media_count"] += 1
-        return {"response": ai_text, "media_remaining": 3 - user_info["media_count"]}
+        return {"response": ai_text, "media_remaining": 1000 - user_info["media_count"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
