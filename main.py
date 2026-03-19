@@ -94,7 +94,7 @@ async def chat_endpoint(
 ):
     user_info = get_user_data(user_id)
     has_media = image is not None or audio is not None
-    if has_media and user_info["media_count"] >= 3:
+    if has_media and user_info["media_count"] >= 1000:
         raise HTTPException(status_code=429, detail="მედია ლიმიტი ამოწურულია.")
 
     # --- Chroma DB-ში ძებნა და დებაგინგი ---
