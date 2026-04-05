@@ -1,7 +1,7 @@
 import sys
 import os
 
-# 1. SQLite ფიქსაცია (აუცილებელია სერვერისთვის)
+# 1. SQLite ფიქსაცია (აუცილებელი არის სერვერისთვის)
 try:
     import pysqlite3
     sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
