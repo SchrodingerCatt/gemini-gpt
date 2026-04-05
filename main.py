@@ -1,4 +1,83 @@
-import traceback # ეს აუცილებლად დაამატე ფაილის თავში იმპორტებთან!
+import sys
+import os
+import traceback
+import datetime
+import uvicorn
+import base64
+import google.generativeai as genai
+from openai import OpenAI
+from typing import List, Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from pypdf import PdfReader
+from langchain_chroma import Chroma
+from dotenv import load_dotenv
+from ingest_gemini import GeminiEmbeddings 
+
+# 1. SQLite ფიქსაცია
+try:
+    import pysqlite3
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except (ImportError, KeyError):
+    pass
+
+load_dotenv()
+
+# 2. აპლიკაციის ინიციალიზაცია (ეს უნდა იყოს ფუნქციების ზემოთ!)
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware, 
+    allow_origins=["*"], 
+    allow_credentials=False, 
+    allow_methods=["*"], 
+    allow_headers=["*"]
+)
+
+# 3. კონფიგურაცია
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db_new_v25")
+PERSONA_PDF = os.path.join(BASE_DIR, "prompt.pdf")
+MY_GEMINI_MODEL = "gemini-1.5-flash" 
+
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+client_openai = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+def load_persona():
+    base_text = ""
+    if os.path.exists(PERSONA_PDF):
+        try:
+            reader = PdfReader(PERSONA_PDF)
+            base_text = "".join([page.extract_text() for page in reader.pages if page.extract_text()])
+        except: base_text = "შენ ხარ ანITა."
+    
+    return f"""
+    {base_text}
+    
+    მკაცრი წესები (Strict Handling):
+    1. იყავი მაქსიმალურად მოკლე.
+    2. არ ახსნა ტექნიკური ტერმინები უმიზეზოდ.
+    3. გამოიყენე ემოჯები 😊, 🤖, ✨.
+    """
+
+SYSTEM_INSTRUCTION = load_persona()
+vector_store = Chroma(persist_directory=CHROMA_PATH, embedding_function=GeminiEmbeddings())
+db = {} 
+
+def get_user_data(user_id: str):
+    today = str(datetime.date.today())
+    if user_id not in db or db[user_id]["date"] != today:
+        db[user_id] = {"history": [], "media_count": 0, "date": today}
+    return db[user_id]
+
+@app.get("/", response_class=HTMLResponse)
+async def read_index():
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"შეცდომა ფაილის წაკითხვისას: {str(e)}"
 
 @app.post("/process_query")
 async def chat_endpoint(
@@ -10,7 +89,6 @@ async def chat_endpoint(
 ):
     user_info = get_user_data(user_id)
     
-    # [DEBUG] ლოგირება
     if image: print(f"[DEBUG] მოვიდა ფოტო: {image.filename}", flush=True)
     if audio: print(f"[DEBUG] მოვიდა აუდიო: {audio.filename}", flush=True)
     
@@ -19,7 +97,6 @@ async def chat_endpoint(
         raise HTTPException(status_code=429, detail="მედია ლიმიტი ამოწურულია.")
 
     try:
-        # Chroma DB-ში ძებნა
         docs = vector_store.similarity_search(prompt, k=2)
         context = "\n".join([d.page_content for d in docs])
         full_query = f"დამხმარე მასალა: {context}\n\nმომხმარებელი: {prompt}"
@@ -38,7 +115,6 @@ async def chat_endpoint(
             chat_session = model.start_chat(history=user_info["history"])
             parts = [full_query]
             
-            # აუდიოსა და ფოტოს წაკითხვა დამატებამდე
             if image:
                 image_data = await image.read()
                 parts.append({"mime_type": image.content_type, "data": image_data})
@@ -56,11 +132,8 @@ async def chat_endpoint(
         return {"response": ai_text, "media_remaining": 1000 - user_info["media_count"]}
 
     except Exception as e:
-        # აი, ეს არის მთავარი დიაგნოსტიკური ნაწილი:
         error_details = traceback.format_exc()
         print(f"[ERROR] მოხდა შეცდომა: {error_details}", flush=True)
-        
-        # ვაბრუნებთ დეტალურ ინფორმაციას ბრაუზერისთვის
         return JSONResponse(
             status_code=500,
             content={
@@ -69,3 +142,7 @@ async def chat_endpoint(
                 "message": "შეცდომა ბექენდში. ნახეთ traceback დეტალებისთვის."
             }
         )
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8090))
+    uvicorn.run(app, host="0.0.0.0", port=port)
